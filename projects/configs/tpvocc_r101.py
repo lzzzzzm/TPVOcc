@@ -34,7 +34,7 @@ model = dict(
     use_grid_mask=True,
     video_test_mode=True,
     data_preprocessor=dict(
-        type='Det3DDataPreprocessor', **img_norm_cfg, pad_size_divisor=32),
+        type='OccDataPreprocessor', **img_norm_cfg, pad_size_divisor=32),
     img_backbone=dict(
         type='mmdet.ResNet',
         depth=101,
@@ -127,18 +127,15 @@ train_pipeline = [
         to_float32=True,
         num_views=6,
         backend_args=backend_args),
-    dict(type='ResizeMultiViewImage',
-         size=(256, 256)),
     dict(
-        type='LoadAnnotations3D',
-        with_bbox_3d=True,
-        with_label_3d=True,
-        with_attr_label=False),
-    dict(type='LoadOccGTFromFile', data_root=data_root),
+        type='LoadOccAnnotations3D',
+        with_occ_semantics=True,
+        with_camera_mask=False,
+        with_lidar_mask=False),
     dict(type='MultiViewWrapper', transforms=train_transforms),
-    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
-    dict(type='ObjectNameFilter', classes=class_names),
-    dict(type='CustomPack3DDetInputs', keys=['img', 'voxel_semantics', 'mask_lidar', 'mask_camera'])
+    dict(type='ResizeMultiViewImage',
+         size=(128, 128)),
+    dict(type='CustomPack3DDetInputs', keys=['img', 'occ_semantics'])
 ]
 
 test_pipeline = [

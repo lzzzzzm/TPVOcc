@@ -65,14 +65,14 @@ class TPVOccHead(BaseModule):
         return occ_score
 
     def loss(self,
-             voxel_semantics,
+             occ_semantics,
              mask_camera,
              preds_dicts,
              ):
         loss_dict = dict()
         occ = preds_dicts['occ']
-        assert voxel_semantics.min() >= 0 and voxel_semantics.max() <= 17
-        losses = self.loss_single(voxel_semantics, mask_camera, occ)
+        assert occ_semantics.min() >= 0 and occ_semantics.max() <= 17
+        losses = self.loss_single(occ_semantics, mask_camera, occ)
         loss_dict['loss_occ'] = losses
         return loss_dict
 
@@ -93,7 +93,7 @@ class TPVOccHead(BaseModule):
             loss_occ = self.loss_occ(preds, voxel_semantics,)
         return loss_occ
 
-    def forward(self, mlvl_feats, img_metas, prev_bev=None, **kwargs):
+    def forward(self, mlvl_feats, img_metas, prev_bev=None, only_bev=False):
         bs, num_cam, _, _, _ = mlvl_feats[0].shape
         dtype = mlvl_feats[0].dtype
         object_query_embeds = None
@@ -101,18 +101,32 @@ class TPVOccHead(BaseModule):
         bev_mask = torch.zeros((bs, self.bev_h, self.bev_w),
                                device=bev_queries.device).to(dtype)
         bev_pos = self.positional_encoding(bev_mask).to(dtype)
-        outputs = self.transformer(
-            mlvl_feats,
-            bev_queries,
-            object_query_embeds,
-            self.bev_h,
-            self.bev_w,
-            grid_length=(self.real_h / self.bev_h,
-                         self.real_w / self.bev_w),
-            bev_pos=bev_pos,
-            img_metas=img_metas,
-            prev_bev=prev_bev
-        )
+
+        if only_bev:
+            return self.transformer.get_bev_features(
+                mlvl_feats,
+                bev_queries,
+                self.bev_h,
+                self.bev_w,
+                grid_length=(self.real_h / self.bev_h,
+                             self.real_w / self.bev_w),
+                bev_pos=bev_pos,
+                img_metas=img_metas,
+                prev_bev=prev_bev,
+            )
+        else:
+            outputs = self.transformer(
+                mlvl_feats,
+                bev_queries,
+                object_query_embeds,
+                self.bev_h,
+                self.bev_w,
+                grid_length=(self.real_h / self.bev_h,
+                             self.real_w / self.bev_w),
+                bev_pos=bev_pos,
+                img_metas=img_metas,
+                prev_bev=prev_bev
+            )
         bev_embed, occ_outs = outputs
         outs = {
             'bev_embed': bev_embed,

@@ -37,7 +37,6 @@ class TPVOcc(MVXTwoStageDetector):
 
 
     def extract_img_feat(self, img: Tensor,
-                         batch_input_metas: List[dict],
                          len_queue = None) -> List[Tensor]:
         """Extract features from images.
 
@@ -53,11 +52,6 @@ class TPVOcc(MVXTwoStageDetector):
 
         B = img.size(0)
         if img is not None:
-            input_shape = img.shape[-2:]  # bs nchw
-            # update real input shape of each single img
-            for img_meta in batch_input_metas:
-                img_meta.update(input_shape=input_shape)
-
             if img.dim() == 5 and img.size(0) == 1:
                 img.squeeze_()
             elif img.dim() == 5 and img.size(0) > 1:
@@ -81,16 +75,6 @@ class TPVOcc(MVXTwoStageDetector):
             else:
                 img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
         return img_feats_reshaped
-
-    def extract_feat(self, batch_inputs_dict: Dict,
-                     batch_input_metas: List[dict]) -> List[Tensor]:
-        """Extract features from images.
-
-        Refer to self.extract_img_feat()
-        """
-        imgs = batch_inputs_dict.get('imgs', None)
-        img_feats = self.extract_img_feat(imgs, batch_input_metas)
-        return img_feats
 
     def predict(self, batch_inputs_dict: Dict[str, Optional[Tensor]],
                 batch_data_samples: List[Det3DDataSample],
@@ -149,7 +133,6 @@ class TPVOcc(MVXTwoStageDetector):
                                                  ret_list)
         return detsamples
 
-
     def simple_test_pts(self, img_feats, img_metas, prev_bev=None):
         """Test function"""
         outs = self.pts_bbox_head(img_feats, img_metas, prev_bev=prev_bev)
@@ -158,14 +141,71 @@ class TPVOcc(MVXTwoStageDetector):
 
     def simple_test(self, batch_inputs_dict, batch_input_metas, prev_bev=None):
         """Test function without augmentaiton."""
-        img_feats = self.extract_feat(batch_inputs_dict, batch_input_metas)
+        imgs = batch_inputs_dict.get('imgs', None)
+        img_feats = self.extract_img_feat(imgs)
         new_prev_bev, occ = self.simple_test_pts(
             img_feats, batch_input_metas, prev_bev)
         return new_prev_bev, occ
 
+    def obtain_history_bev(self, imgs_queue, img_metas_list):
+        self.eval()
+        with torch.no_grad():
+            prev_bev = None
+            bs, len_queue, num_cams, C, H, W = imgs_queue.shape
+            imgs_queue = imgs_queue.reshape(bs * len_queue, num_cams, C, H, W)
+            img_feats_list = self.extract_img_feat(img=imgs_queue, len_queue=len_queue)
+            for i in range(len_queue):
+                img_metas = [each[i] for each in img_metas_list]
+                if not img_metas[0]['prev_bev_exists']:
+                    prev_bev = None
+                img_feats = [each_scale[:, i] for each_scale in img_feats_list]
+                prev_bev = self.pts_bbox_head(
+                    img_feats, img_metas, prev_bev, only_bev=True)
+            self.train()
+            return prev_bev
+
+    def forward_pts_train(self,
+                          img_feats,
+                          occ_semantics,
+                          img_metas,
+                          mask_camera=None,
+                          prev_bev=None):
+        outs = self.pts_bbox_head(img_feats, img_metas, prev_bev=prev_bev)
+        loss_inputs = [occ_semantics, mask_camera, outs]
+        losses = self.pts_bbox_head.loss(*loss_inputs)
+        return losses
+
     def loss(self, batch_inputs_dict: Dict[List, torch.Tensor],
              batch_data_samples: List[Det3DDataSample],
              **kwargs) -> List[Det3DDataSample]:
-        batch_input_metas = [item.metainfo for item in batch_data_samples]
-        print(batch_input_metas)
+        # process img metas
+        # TODO : only support batch size = 1
+        batch_input_metas = {}
+        for key in batch_data_samples:
+            index_batch_meta_info = batch_data_samples[key][0].metainfo
+            # update meta info
+            index_batch_meta_info['scene_token'] = batch_data_samples[key][0].scene_token
+            index_batch_meta_info['prev_bev_exists'] = batch_data_samples[key][0].prev_bev_exists
+            batch_input_metas[key] = index_batch_meta_info
+        img_metas = [batch_input_metas]
+        imgs = batch_inputs_dict.get('imgs', None)
 
+        len_queue = imgs.size(1)
+        prev_img = imgs[:, :-1, ...]
+        imgs = imgs[:, -1, ...]
+        prev_img_metas = copy.deepcopy(img_metas)
+        prev_bev = self.obtain_history_bev(prev_img, prev_img_metas)
+
+        img_metas = [each[len_queue - 1] for each in img_metas]
+        if not img_metas[0]['prev_bev_exists']:
+            prev_bev = None
+
+        img_feats = self.extract_img_feat(imgs)
+        losses = dict()
+        occ_semantics = batch_data_samples[len(batch_data_samples)-1][0].gt_instances_3d.occ_semantics
+        losses_pts = self.forward_pts_train(img_feats,
+                                            occ_semantics,
+                                            img_metas,
+                                            prev_bev=prev_bev)
+        losses.update(losses_pts)
+        return losses

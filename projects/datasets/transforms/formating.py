@@ -58,7 +58,11 @@ class CustomPack3DDetInputs(BaseTransform):
 
     SEG_KEYS = [
         'gt_seg_map', 'pts_instance_mask', 'pts_semantic_mask',
-        'gt_semantic_seg', 'voxel_semantics', 'mask_lidar', 'mask_camera'
+        'gt_semantic_seg'
+    ]
+
+    OCC_KEYS = [
+        'occ_semantics', 'mask_lidar', 'mask_camera'
     ]
 
     def __init__(
@@ -76,7 +80,7 @@ class CustomPack3DDetInputs(BaseTransform):
                             'cam2global', 'crop_offset', 'img_crop_offset',
                             'resize_img_shape', 'lidar2cam', 'ori_lidar2img',
                             'num_ref_frames', 'num_views', 'ego2global',
-                            'can_bus', 'ego2lidar', 'scene_token')
+                            'can_bus', 'ego2lidar', 'scene_token', 'prev_bev_exists')
     ) -> None:
         self.keys = keys
         self.meta_keys = meta_keys
@@ -174,7 +178,7 @@ class CustomPack3DDetInputs(BaseTransform):
                 'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels',
                 'gt_bboxes_labels', 'attr_labels', 'pts_instance_mask',
                 'pts_semantic_mask', 'centers_2d', 'depths', 'gt_labels_3d',
-                'voxel_semantics', 'mask_lidar', 'mask_camera'
+                'occ_semantics', 'mask_lidar', 'mask_camera'
         ]:
             if key not in results:
                 continue
@@ -217,6 +221,8 @@ class CustomPack3DDetInputs(BaseTransform):
                         gt_instances[self._remove_prefix(key)] = results[key]
                 elif key in self.SEG_KEYS:
                     gt_pts_seg[self._remove_prefix(key)] = results[key]
+                elif key in self.OCC_KEYS:
+                    gt_instances_3d[key] = results[key]
                 else:
                     raise NotImplementedError(f'Please modified '
                                               f'`Pack3DDetInputs` '
