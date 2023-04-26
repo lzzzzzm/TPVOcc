@@ -9,7 +9,9 @@ from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmdet3d.structures import Det3DDataSample
 from mmdet3d.registry import MODELS
 
-from .grid_mask import GridMask
+from projects.models.utils import GridMask
+
+
 @MODELS.register_module()
 class TPVOcc(MVXTwoStageDetector):
     def __init__(self,
@@ -19,7 +21,7 @@ class TPVOcc(MVXTwoStageDetector):
                  img_neck=None,
                  pts_bbox_head=None,
                  video_test_mode=False):
-        
+
         super().__init__(data_preprocessor=data_preprocessor,
                          img_backbone=img_backbone,
                          img_neck=img_neck,
@@ -35,9 +37,8 @@ class TPVOcc(MVXTwoStageDetector):
             'prev_angle': 0,
         }
 
-
     def extract_img_feat(self, img: Tensor,
-                         len_queue = None) -> List[Tensor]:
+                         len_queue=None) -> List[Tensor]:
         """Extract features from images.
 
         Args:
@@ -75,6 +76,20 @@ class TPVOcc(MVXTwoStageDetector):
             else:
                 img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
         return img_feats_reshaped
+
+    def simple_test_pts(self, img_feats, img_metas, prev_bev=None):
+        """Test function"""
+        outs = self.pts_bbox_head(img_feats, img_metas, prev_bev=prev_bev)
+        occ = self.pts_bbox_head.get_occ(outs)
+        return outs['bev_embed'], occ
+
+    def simple_test(self, batch_inputs_dict, batch_input_metas, prev_bev=None):
+        """Test function without augmentaiton."""
+        imgs = batch_inputs_dict.get('imgs', None)
+        img_feats = self.extract_img_feat(imgs)
+        new_prev_bev, occ = self.simple_test_pts(
+            img_feats, batch_input_metas, prev_bev)
+        return new_prev_bev, occ
 
     def predict(self, batch_inputs_dict: Dict[str, Optional[Tensor]],
                 batch_data_samples: List[Det3DDataSample],
@@ -133,20 +148,6 @@ class TPVOcc(MVXTwoStageDetector):
                                                  ret_list)
         return detsamples
 
-    def simple_test_pts(self, img_feats, img_metas, prev_bev=None):
-        """Test function"""
-        outs = self.pts_bbox_head(img_feats, img_metas, prev_bev=prev_bev)
-        occ = self.pts_bbox_head.get_occ(outs)
-        return outs['bev_embed'], occ
-
-    def simple_test(self, batch_inputs_dict, batch_input_metas, prev_bev=None):
-        """Test function without augmentaiton."""
-        imgs = batch_inputs_dict.get('imgs', None)
-        img_feats = self.extract_img_feat(imgs)
-        new_prev_bev, occ = self.simple_test_pts(
-            img_feats, batch_input_metas, prev_bev)
-        return new_prev_bev, occ
-
     def obtain_history_bev(self, imgs_queue, img_metas_list):
         self.eval()
         with torch.no_grad():
@@ -202,7 +203,7 @@ class TPVOcc(MVXTwoStageDetector):
 
         img_feats = self.extract_img_feat(imgs)
         losses = dict()
-        occ_semantics = batch_data_samples[len(batch_data_samples)-1][0].gt_instances_3d.occ_semantics
+        occ_semantics = batch_data_samples[len(batch_data_samples) - 1][0].gt_instances_3d.occ_semantics
         losses_pts = self.forward_pts_train(img_feats,
                                             occ_semantics,
                                             img_metas,

@@ -1,6 +1,6 @@
 _base_ = ['mmdet3d::_base_/default_runtime.py']
 
-custom_imports = dict(imports=['projects.tpvocc',
+custom_imports = dict(imports=['projects.models',
                                'projects.datasets',
                                'projects.evaluation'], allow_failed_imports=False)
 
