@@ -9,7 +9,7 @@ point_cloud_range = [-40, -40, -1.0, 40, 40, 5.4]
 voxel_size = [0.2, 0.2, 8]
 
 img_norm_cfg = dict(
-    mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], bgr_to_rgb=False)
+   mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 # For nuScenes we usually do 10-class detection
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
@@ -257,7 +257,7 @@ param_scheduler = [
 total_epochs = 24
 
 train_cfg = dict(
-    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_interval=2)
+    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_interval=1)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 default_hooks = dict(
