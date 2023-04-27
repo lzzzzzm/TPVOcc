@@ -2,7 +2,8 @@ _base_ = ['mmdet3d::_base_/default_runtime.py']
 
 custom_imports = dict(imports=['projects.models',
                                'projects.datasets',
-                               'projects.evaluation'], allow_failed_imports=False)
+                               'projects.engine',
+                               'projects.evaluation',], allow_failed_imports=False)
 
 point_cloud_range = [-40, -40, -1.0, 40, 40, 5.4]
 voxel_size = [0.2, 0.2, 8]
@@ -106,7 +107,19 @@ model = dict(
             num_feats=position_dims,
             row_num_embed=bev_h,
             col_num_embed=bev_w
+        ),
+        loss_occ=dict(
+            type='mmdet.CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=0.8
+        ),
+        loss_lovasz=dict(
+            type='CustomLovaszLoss',
+            loss_weight=0.2,
+            per_sample=True,
+            classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
         )
+
     )
 )
 

@@ -14,8 +14,8 @@ from mmdet3d.utils import replace_ceph_backend
 def parse_args():
     parser = argparse.ArgumentParser(
         description='MMDet3D test (and eval) a model')
-    parser.add_argument('--config', default='projects/configs/tpvocc_r101.py',help='test config file path')
-    parser.add_argument('--checkpoint', default='ckpts/epoch_23.pth',help='checkpoint file')
+    parser.add_argument('--config', default='projects/configs/tpvocc_intern-s.py',help='test config file path')
+    parser.add_argument('--checkpoint', default='ckpts/bevformer_inter_s_occ.pth',help='checkpoint file')
     parser.add_argument(
         '--work-dir',
         help='the directory to save the file containing evaluation metrics')

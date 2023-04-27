@@ -28,6 +28,7 @@ class TPVOccHead(BaseModule):
                      use_sigmoid=False,
                      loss_weight=1.0
                  ),
+                 loss_lovasz=None,
                  use_mask=False,
                  **kwargs):
 
@@ -45,6 +46,10 @@ class TPVOccHead(BaseModule):
         self.transformer = MODELS.build(transformer)
         self.positional_encoding = MMDETMODELS.build(positional_encoding)
         self.loss_occ = MODELS.build(loss_occ)
+        if loss_lovasz is not None:
+            self.loss_lovasz = MODELS.build(loss_lovasz)
+        else:
+            self.loss_lovasz = None
         self.bev_embedding = nn.Embedding(
             self.bev_h * self.bev_w, self.embed_dims)
 
@@ -69,17 +74,17 @@ class TPVOccHead(BaseModule):
              mask_camera,
              preds_dicts,
              ):
-        loss_dict = dict()
+
         occ = preds_dicts['occ']
         assert occ_semantics.min() >= 0 and occ_semantics.max() <= 17
-        losses = self.loss_single(occ_semantics, mask_camera, occ)
-        loss_dict['loss_occ'] = losses
+        loss_dict = self.loss_single(occ_semantics, mask_camera, occ)
         return loss_dict
 
     def loss_single(self,
                     voxel_semantics,
                     mask_camera,
                     preds):
+        loss_dict = dict()
         voxel_semantics=voxel_semantics.long()
         if self.use_mask:
             voxel_semantics=voxel_semantics.reshape(-1)
@@ -87,11 +92,17 @@ class TPVOccHead(BaseModule):
             mask_camera=mask_camera.reshape(-1)
             num_total_samples=mask_camera.sum()
             loss_occ=self.loss_occ(preds,voxel_semantics,mask_camera, avg_factor=num_total_samples)
+            loss_dict['loss_occ'] = loss_occ
         else:
+            if self.loss_lovasz is not None:
+                loss_lovasz = self.loss_lovasz(preds, voxel_semantics)
+                loss_dict['loss_lovasz'] = loss_lovasz
             voxel_semantics = voxel_semantics.reshape(-1)
             preds = preds.reshape(-1, self.num_classes)
-            loss_occ = self.loss_occ(preds, voxel_semantics,)
-        return loss_occ
+            loss_occ = self.loss_occ(preds, voxel_semantics)
+            loss_dict['loss_occ'] = loss_occ
+
+        return loss_dict
 
     def forward(self, mlvl_feats, img_metas, prev_bev=None, only_bev=False):
         bs, num_cam, _, _, _ = mlvl_feats[0].shape
